@@ -17,7 +17,7 @@
 #### Windows
 
 Необходимо скачать для Windows архив:
- - implant-infoscaner.zip
+ - [implant-infoscaner_1.0.0.zip](https://github.com/IarcaniusI/implant-infoscaner/files/4921353/implant-infoscaner_1.0.0.zip)
 
 После разархивации в каталоге должен находиться:
  - ```implant-infoscaner.exe``` - выполняемый файл;
@@ -34,7 +34,7 @@
 #### Linux, как бинарный файл
 
 Необходимо скачать для Linux архив:
- - implant-infoscaner.tar.gz
+ - [implant-infoscaner_amd64_1.0.0.tar.gz](https://github.com/IarcaniusI/implant-infoscaner/files/4921351/implant-infoscaner_amd64_1.0.0.tar.gz)
 
 После разархивации в каталоге должен находиться:
  - ```implant-infoscaner``` - выполняемый файл;
