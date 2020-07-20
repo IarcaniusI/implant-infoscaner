@@ -57,9 +57,15 @@ def main():
 
     # reddit authentication
     try:
-        my_user, subreddit = auth(auth_settings)
+        my_user, subreddit, reddit = auth(auth_settings)
     except Exception as err:
         critical_print("Can't auth : ", err)
+
+    # reddit user checking and loading
+    try:
+        load_user_subscribers(reddit, run_settings)
+    except Exception as err:
+        critical_print("Can't obtain user : ", err)
 
     # script main function executing
     try:
@@ -67,7 +73,7 @@ def main():
     except Exception as err:
         critical_print("Runtime error : ", err)
 
-# reddit authentication, username and subreddit obtaining
+# reddit authentication, username, reddit and subreddit obtaining
 # argument s - dict with auth settings
 def auth(s: dict):
     reddit = praw.Reddit(user_agent=s.get("user_agent"),
@@ -79,7 +85,7 @@ def auth(s: dict):
     print(auth_time, "|", PROCESS_NAME, "authenticated, user name: '", my_user, "'")
     subreddit = reddit.subreddit(s.get("subreddit"))
     print("Subredit name: ", subreddit)
-    return my_user, subreddit
+    return my_user, subreddit, reddit
 
 # main sctipt function
 def process_comments_stream(my_user, subreddit, run_settings: dict) -> None:
@@ -89,20 +95,26 @@ def process_comments_stream(my_user, subreddit, run_settings: dict) -> None:
 
         # don't process youself comment
         if comment.author.name != my_user.name:
-            detected = process_comment(comment_body, run_settings)
-            if detected is not None:
-                message_subject = "THEME " + detected + " SCANNED"
+            suitable_rules = process_comment(comment_body, run_settings)
+            for rule in suitable_rules:
+                message_subject = "THEME " + rule.get("theme") + " SCANNED"
                 message_text = comment_body + "\nwww.reddit.com{}".format(comment.permalink)
 
                 if not NO_NOTIFY:
                     reply_time = datetime.now().isoformat().replace("T", " ")
                     print(reply_time, "|", message_subject, ":", message_text)
 
+                # send notification to account user and all subscribers
                 my_user.message(message_subject, message_text)
+                for username in rule.get("subscribers_users"):
+                    try:
+                        username.message(message_subject, message_text)
+                    except Exception as err:
+                        print(reply_time, "|", "Can't send message to user '", username.name,"'")
 
-
-# return reply phrase if success, else None
+# return list of suitable rules if success, else empty list
 def process_comment(comment_body: str, run_settings: dict):
+    suitable = []
     for rule in run_settings:
         success_searches = 0
         for compiled in rule.get("compiled"):
@@ -110,9 +122,19 @@ def process_comment(comment_body: str, run_settings: dict):
                 success_searches += 1
 
         if len(rule.get("compiled")) == success_searches:
-            return rule.get("theme")
+            suitable.append(rule)
 
-    return None
+    return suitable
+
+# check existing of subscribers accounts and add user to settings dict
+def load_user_subscribers(reddit, run_settings):
+    for rule in run_settings:
+        usernames_list = rule.get("subscribers", [])
+        rule["subscribers_users"] = []
+        if len(usernames_list) > 0:
+            for username in usernames_list:
+                user = reddit.redditor(username)
+                rule["subscribers_users"].append(user)
 
 # parse JSON file with  auth settings
 def load_auth_settings(filename: str) -> dict:
@@ -165,17 +187,25 @@ def load_run_settings(filename: str) -> list:
             else:
                 if type(rule.get("theme")) is not str:
                     critical_print("Incorrect argument 'theme' in rule '", str(i),"' in file '", filename, "'")
-                else:
-                    rule_params = ["scanner_regexes"]
-                    for rule_param in rule_params:
-                        if type(rule.get(rule_param)) is not list:
-                            critical_print("Incorrect argument '", rule_param, "' in rule '",
+                if type(rule.get("subscribers")) is list:
+                    for value in rule.get("subscribers"):
+                        if type(value) is not str:
+                            critical_print("Incorrect value in list 'subscribers' in rule '",
                                 str(i), "' in file '", filename, "'")
-                        else:
-                            for value in rule.get(rule_param):
-                                if type(value) is not str:
-                                    critical_print("Incorrect value in list '", rule_param, "' in rule '",
-                                        str(i), "' in file '", filename, "'")
+                elif rule.get("subscribers") is not None:
+                    critical_print("Incorrect argument 'subscribers' in rule '",
+                        str(i), "' in file '", filename, "'")
+
+                rule_params = ["scanner_regexes"]
+                for rule_param in rule_params:
+                    if type(rule.get(rule_param)) is not list:
+                        critical_print("Incorrect argument '", rule_param, "' in rule '",
+                            str(i), "' in file '", filename, "'")
+                    else:
+                        for value in rule.get(rule_param):
+                            if type(value) is not str:
+                                critical_print("Incorrect value in list '", rule_param, "' in rule '",
+                                    str(i), "' in file '", filename, "'")
 
     # add compiled regexes for every rule
     for rule in run_settings:
